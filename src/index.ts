@@ -176,7 +176,10 @@ export class MongoDBPostRepository
   }
   async put(post: Post): Promise<void> {
     await this.withConnection(async (db) => {
-      db.collection("post").updateOne({ id: post.getId() }, post.serialize());
+      db.collection("post").updateOne(
+        { id: post.getId() },
+        { $set: post.serialize() }
+      );
     });
   }
   async findById(postId: string): Promise<Post | null> {
@@ -473,7 +476,7 @@ function app(controller: Controller) {
 
   server.put("/post/:postId", async (request) => {
     const { postId } = request.params as Record<"postId", unknown>;
-    const { description, image } = request.params as Record<
+    const { description, image } = request.body as Record<
       "image" | "description",
       unknown
     >;
