@@ -7,6 +7,7 @@ import fastifyCors from "@fastify/cors";
 import { add, getUnixTime, nextSunday } from "date-fns";
 
 import { v4 as createV4Uuid } from "uuid";
+import { Db, MongoClient } from "mongodb";
 
 const IMAGE = {
   UNUPLOADED: "https://example.com/",
@@ -29,6 +30,10 @@ export class User {
 
   getPersonalityClass() {
     return this.data.personalityClass;
+  }
+
+  serialize() {
+    return this.data;
   }
 }
 
@@ -144,9 +149,102 @@ export class MemoryPostRepository implements PostRepository {
   }
 }
 
+class MongoDBRepository {
+  static MONGO_URL = process.env["MONGO_URL"] ?? "mongodb://127.0.0.1:27017";
+
+  client: Promise<MongoClient>;
+
+  protected constructor(mongoUrl?: string) {
+    this.client = new MongoClient(
+      mongoUrl ?? MongoDBRepository.MONGO_URL
+    ).connect();
+  }
+
+  protected async withConnection<T>(closure: (db: Db) => Promise<T>) {
+    return await closure((await this.client).db("yogen-nikki"));
+  }
+}
+
+export class MongoDBPostRepository
+  extends MongoDBRepository
+  implements PostRepository
+{
+  async create(post: Post): Promise<void> {
+    await this.withConnection(async (db) => {
+      db.collection("post").insertOne(post.serialize());
+    });
+  }
+  async put(post: Post): Promise<void> {
+    await this.withConnection(async (db) => {
+      db.collection("post").updateOne({ id: post.getId() }, post.serialize());
+    });
+  }
+  async findById(postId: string): Promise<Post | null> {
+    const result = await this.withConnection(async (db) => {
+      return await db.collection("post").findOne<PostDTO>({ id: postId });
+    });
+
+    if (!result) {
+      throw new Error("No such post");
+    }
+
+    const post = new Post(result);
+
+    return post;
+  }
+  async findByOwnerId(userId: string): Promise<Post[]> {
+    const result = await this.withConnection(async (db) => {
+      return await db
+        .collection("post")
+        .find<PostDTO>({ owner: userId })
+        .map((document) => new Post(document))
+        .toArray();
+    });
+
+    return result;
+  }
+
+  private static instance = new MongoDBPostRepository();
+
+  static getInstance() {
+    return MongoDBPostRepository.instance;
+  }
+}
+
 interface UserRepository {
   create(user: User): Promise<void>;
   findById(id: string): Promise<User | null>;
+}
+
+export class MongoDBUserRepository
+  extends MongoDBRepository
+  implements UserRepository
+{
+  async create(user: User): Promise<void> {
+    await this.withConnection(async (db) => {
+      return await db.collection("user").insertOne(user.serialize());
+    });
+  }
+
+  async findById(id: string): Promise<User | null> {
+    const result = await this.withConnection(async (db) => {
+      return await db.collection("user").findOne<UserDTO>({ id: id });
+    });
+
+    if (!result) {
+      throw new Error("No such user");
+    }
+
+    const user = new User(result);
+
+    return user;
+  }
+
+  private static instance = new MongoDBUserRepository();
+
+  static getInstance() {
+    return MongoDBUserRepository.instance;
+  }
 }
 
 export class MemoryUserRepository implements UserRepository {
@@ -392,7 +490,7 @@ function app(controller: Controller) {
     return result;
   });
 
-  server.post("/posts/by-uid/:uid", async (request) => {
+  server.get("/posts/by-uid/:uid", async (request) => {
     const { uid } = request.params as Record<"uid", unknown>;
 
     if (typeof uid !== "string") {
@@ -411,8 +509,14 @@ function app(controller: Controller) {
 
 container.register("UserService", { useValue: UserService.getInstace() });
 container.register("PostService", { useValue: PostService.getInstace() });
-container.register("PostRepository", { useClass: MemoryPostRepository });
-container.register("UserRepository", { useValue: new MemoryUserRepository() });
+// container.register("PostRepository", { useClass: MemoryPostRepository });
+container.register("PostRepository", {
+  useValue: MongoDBPostRepository.getInstance(),
+});
+// container.register("UserRepository", { useValue: new MemoryUserRepository() });
+container.register("UserRepository", {
+  useValue: MongoDBUserRepository.getInstance(),
+});
 container.register("CreateAccountUsecase", {
   useClass: CreateAccountUsecaseInteractor,
 });
