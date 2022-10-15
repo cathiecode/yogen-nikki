@@ -406,7 +406,7 @@ function app(controller: Controller) {
     }
   });
 
-  server.listen({ port: parseInt(process.env.PORT ?? "80") });
+  server.listen({ port: parseInt(process.env.PORT ?? "80"), host: "0.0.0.0" });
 }
 
 container.register("UserService", { useValue: UserService.getInstace() });
