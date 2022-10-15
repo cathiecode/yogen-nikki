@@ -532,20 +532,6 @@ function app(controller: Controller) {
     }
   });
 
-  server.addContentTypeParser(
-    "application/octet-stream",
-    // eslint-disable-next-line @typescript-eslint/no-empty-function
-    (_request, payload, done) => {
-      let data = "";
-      payload.on("data", (chunk) => {
-        data += chunk;
-      });
-      payload.on("end", () => {
-        done(null, data);
-      });
-    }
-  );
-
   const UPLOAD_DIR = process.env["UPLOAD_DIR"] ?? "upload/";
   const BASE_URL =
     process.env["BASE_URL"] ?? "http://yogen-nikki.miselogy.miraidai.fun";
@@ -553,7 +539,10 @@ function app(controller: Controller) {
   server.post("/image", async (request) => {
     const id = createV4Uuid();
     const filename = id + ".png";
-    fs.writeFileSync(path.join(UPLOAD_DIR, filename), request.body as string);
+    fs.writeFileSync(
+      path.join(UPLOAD_DIR, filename),
+      Buffer.from(request.body as number[])
+    );
     return { url: BASE_URL + "/image/" + filename };
   });
 
