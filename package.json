@@ -9,7 +9,7 @@
     "dev": "concurrently 'esbuild src/index.ts --outfile=build/index.js --sourcemap --platform=node --watch' 'nodemon'",
     "format": "prettier --ignore-path .gitignore -w **/*.{ts,js,json}",
     "prepare": "husky install",
-    "start": "node build/index.js"
+    "start": "migrate-mongo up && node build/index.js"
   },
   "dependencies": {
     "@fastify/cors": "^8.1.0",
