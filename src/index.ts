@@ -161,7 +161,7 @@ class MongoDBRepository {
   }
 
   protected async withConnection<T>(closure: (db: Db) => Promise<T>) {
-    return await closure((await this.client).db("yogen-nikki"));
+    return await closure((await this.client).db("yogen_nikki"));
   }
 }
 
