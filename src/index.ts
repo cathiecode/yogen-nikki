@@ -4,14 +4,16 @@ import fastify from "fastify";
 import fastifySensible from "@fastify/sensible";
 import fastifyCors from "@fastify/cors";
 
-import { add, getUnixTime, nextSunday } from "date-fns";
+import { add, fromUnixTime, getUnixTime, isBefore, nextSunday } from "date-fns";
 
 import { v4 as createV4Uuid } from "uuid";
 import { Db, MongoClient } from "mongodb";
 
 const IMAGE = {
-  UNUPLOADED: "https://example.com/",
-  FAILED: "https://example.com/",
+  UNUPLOADED:
+    "https://firebasestorage.googleapis.com/v0/b/yogen-nikki.appspot.com/o/glitch-white-animation.gif?alt=media&token=5de1cffa-75b6-43d4-aa3e-b6c5c5762dcd",
+  FAILED:
+    "https://firebasestorage.googleapis.com/v0/b/yogen-nikki.appspot.com/o/glitch-red-animation.gif?alt=media&token=204a3011-869b-4a91-9365-ce83d59e765e",
 } as const;
 
 type PersonalityClass = { outdoor: boolean; extrovert: boolean };
@@ -63,10 +65,19 @@ type PostDTO = {
   owner: string;
 };
 
-class Post {
-  constructor(private data: PostDTO) {}
+type PostEntity = {
+  id: string;
+  title: string;
+  description: string;
+  image: string | null;
+  deadline: number;
+  owner: string;
+};
 
-  serialize() {
+class Post {
+  constructor(private data: PostEntity) {}
+
+  serialize(): PostEntity {
     return this.data;
   }
 
@@ -96,7 +107,7 @@ export class PostService {
       title: this.getTitle(personalityClass),
       description: "",
       deadline: this.getDeadline(),
-      image: IMAGE.UNUPLOADED,
+      image: null,
       owner: ownerId,
     });
   }
@@ -300,12 +311,7 @@ type AddNewPostUsecaseInput = {
   userId: string;
 };
 
-type AddNewPostUsecaseOutput = {
-  id: string;
-  title: string;
-  image: string;
-  deadline: number;
-};
+type AddNewPostUsecaseOutput = PostEntity;
 
 type AddNewPostUsecase = Usecase<
   AddNewPostUsecaseInput,
@@ -342,13 +348,7 @@ type GetUserTimelineUsecaseInput = {
 };
 
 type GetUserTimelineUsecaseOutput = {
-  list: {
-    id: string;
-    title: string;
-    description: string;
-    image: string;
-    deadline: number;
-  }[];
+  list: PostEntity[];
 };
 
 type GetUserTimelineUsecase = Usecase<
@@ -379,13 +379,7 @@ type EditPostUsecaseInput = {
 };
 
 type EditPostUsecaseOutput = {
-  result: {
-    id: string;
-    title: string;
-    description: string;
-    image: string;
-    deadline: number;
-  };
+  result: PostEntity;
 };
 
 type EditPostUsecase = Usecase<EditPostUsecaseInput, EditPostUsecaseOutput>;
@@ -426,17 +420,41 @@ class Controller {
   createAccount(personalityClass: { outdoor: boolean; extrovert: boolean }) {
     return this.createAccountUsecase.handle({ personalityClass });
   }
-  addNewPost(ownerId: string) {
-    return this.addNewPostUsecase.handle({
-      userId: ownerId,
-    });
+  async addNewPost(ownerId: string) {
+    return this.postEntityToPostDTO(
+      await this.addNewPostUsecase.handle({
+        userId: ownerId,
+      })
+    );
   }
-  async getUserTimeline(userId: string) {
-    return (await this.getUserTimelineUsecase.handle({ userId })).list;
+  async getUserTimeline(userId: string): Promise<PostDTO[]> {
+    return (await this.getUserTimelineUsecase.handle({ userId })).list.map(
+      (post) => this.postEntityToPostDTO(post)
+    );
   }
 
   async editPost(postId: string, image: string, description: string) {
-    return await this.editPostUsecase.handle({ postId, image, description });
+    return {
+      result: this.postEntityToPostDTO(
+        (await this.editPostUsecase.handle({ postId, image, description }))
+          .result
+      ),
+    };
+  }
+
+  private postEntityToPostDTO(item: PostEntity, nowDate: Date = new Date()) {
+    return {
+      id: item.id,
+      title: item.title,
+      description: item.description,
+      image:
+        item.image ??
+        (isBefore(nowDate, fromUnixTime(item.deadline))
+          ? IMAGE.UNUPLOADED
+          : IMAGE.FAILED),
+      deadline: item.deadline,
+      owner: item.owner,
+    };
   }
 }
 
