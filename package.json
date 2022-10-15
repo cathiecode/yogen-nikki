@@ -14,6 +14,7 @@
   "dependencies": {
     "@fastify/cors": "^8.1.0",
     "@fastify/sensible": "^5.1.1",
+    "@fastify/static": "^6.5.0",
     "date-fns": "^2.29.3",
     "fastify": "^4.8.1",
     "migrate-mongo": "^9.0.0",
