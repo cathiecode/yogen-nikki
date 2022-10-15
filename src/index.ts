@@ -501,7 +501,9 @@ function app(controller: Controller) {
     }
 
     try {
-      return await controller.getUserTimeline(uid);
+      return {
+        list: await controller.getUserTimeline(uid),
+      };
     } catch (e) {
       throw server.httpErrors.internalServerError;
     }
